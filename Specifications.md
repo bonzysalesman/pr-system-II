@@ -1,5 +1,33 @@
 # 1PWR Procurement System Specifications
 
+## Project Directory Structure
+
+This section outlines the main directories and their purpose within the `pr-system` repository.
+
+-   `/` (Root): Contains configuration files (`package.json`, `vite.config.ts`, `tsconfig.json`, etc.), `Specifications.md`, `.windsurfrules`, and top-level project directories.
+-   `/e2e-tests`: Contains end-to-end tests for the application.
+-   `/functions`: Contains Firebase Cloud Functions used by the application.
+    -   `/functions/src`: Source code for the cloud functions (TypeScript).
+-   `/prsystem`: (Purpose unclear - possibly a related sub-project or older version? Contains `src` and `node_modules`).
+    -   `/prsystem/src`: Source code for the `prsystem` component.
+-   `/public`: Static assets served directly by the web server.
+-   `/src`: Main source code for the React frontend application.
+    -   `/src/assets`: Static assets like images, fonts, etc., bundled with the application.
+    -   `/src/components`: Reusable React components.
+    -   `/src/config`: Application configuration files (e.g., Firebase config).
+    -   `/src/contexts`: React Context providers for global state.
+    -   `/src/hooks`: Custom React hooks (as per project rules).
+    -   `/src/lib`: Shared library code, potentially utilities or core logic.
+    -   `/src/scripts`: Utility scripts related to the frontend application.
+    -   `/src/services`: Modules for interacting with backend APIs or external services (e.g., Firebase).
+    -   `/src/store`: State management setup (e.g., Redux toolkit).
+    -   `/src/styles`: Global styles or styling utilities.
+    -   `/src/types`: TypeScript type definitions and interfaces for the frontend.
+    -   `/src/utils`: General utility functions for the frontend.
+    -   `/src/__tests__`: Unit and integration tests for the frontend code.
+
+*Note: Directories like `node_modules`, `dist`, `archive`, `.git`, `.bak` are omitted as they are typically excluded from source control or contain build artifacts/backups.*
+
 ## Reference Data Management
 
 ### Collection Structure
@@ -228,6 +256,7 @@
 - **requestorId**: ID of user making request
 - **requestorEmail**: Email of requestor
 - **requestor**: Full user object of requestor
+- **approver**: Designated approver's user ID - SINGLE SOURCE OF TRUTH
 
 ### Line Items Structure
 - Each PR contains an array of line items with:
@@ -239,25 +268,31 @@
   - **attachments**: Array of file attachments
 
 ### Approval Workflow Structure
-- PRs use the `approvalWorkflow` field as the single source of truth for approval information:
+- PRs use the `approver` field as the single source of truth for the designated approver:
+  ```typescript
+  interface PRRequest {
+    approver: string;  // Current approver's user ID - SINGLE SOURCE OF TRUTH
+    // other fields...
+  }
+  ```
+- The `approvalWorkflow` field is used to track the history of approver changes:
   ```typescript
   interface ApprovalWorkflow {
-    currentApprover: string;  // Current approver's user ID
+    currentApprover: string;  // Mirror of the PR.approver field
     approvalHistory: ApprovalHistoryItem[];
     lastUpdated: string;
   }
   ```
-- Legacy fields should be deprecated:
-  - `pr.approver` - Deprecated, use `approvalWorkflow.currentApprover`
-  - `pr.approvers` - Deprecated, approval history is in `approvalWorkflow.approvalHistory`
+- All code must respect the `pr.approver` field as the single source of truth:
+  - The `pr.approver` field must never be automatically overridden
+  - The `approvalWorkflow.currentApprover` should always mirror `pr.approver`
+  - The `approvalWorkflow.approvalHistory` tracks the history of approver changes
 
-- All code should be updated to use `approvalWorkflow.currentApprover` as the single source of truth.
-
-- Migration plan:
-  1. Update all PR documents to use `approvalWorkflow`
-  2. Update all code to read from `approvalWorkflow.currentApprover`
-  3. Add validation to ensure `approvalWorkflow` is always present
-  4. Remove legacy fields after migration
+- Implementation requirements:
+  1. Ensure all PR documents maintain `approver` as the single source of truth
+  2. Update all code to respect the manually set `approver` field
+  3. Ensure `approvalWorkflow.currentApprover` always mirrors `pr.approver`
+  4. Track all approver changes in `approvalWorkflow.approvalHistory`
 
 ### PR Status Workflow
 - PRs follow a defined status flow:

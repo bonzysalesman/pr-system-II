@@ -51,7 +51,7 @@ import {
 } from '@mui/material';
 import { AccountCircle } from '@mui/icons-material';
 import { signOut } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { auth } from "@/config/firebase";
 import { useAuth } from '../hooks/useAuth';
 import { useSnackbar } from '../hooks/useSnackbar';
 

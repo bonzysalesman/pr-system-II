@@ -45,17 +45,7 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
  * User Interface
  * Defines the shape of the user object
  */
-export interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: string;
-  organization: string;
-  isActive: boolean;
-  permissionLevel: number;
-  additionalOrganizations?: string[];
-}
+import { User } from '@/types/user';
 
 /**
  * Authentication State Interface

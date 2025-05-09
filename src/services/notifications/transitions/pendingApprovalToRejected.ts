@@ -1,5 +1,5 @@
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../../../config/firebase';
+import { db } from "@/config/firebase";
 import { StatusTransitionHandler, NotificationContext, Recipients, EmailContent } from '../types';
 import { getBaseUrl } from '../../../utils/environment';
 

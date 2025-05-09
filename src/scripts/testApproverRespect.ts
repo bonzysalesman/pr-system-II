@@ -13,8 +13,8 @@ import { getFirestore, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore
 import { initializeApp } from 'firebase/app';
 
 // Import Firebase configuration
-import '../config/firebase'; // Just import to initialize Firebase
-import { auth, db } from '../config/firebase'; // Use the initialized Firebase instances
+import @/config/firebase; // Just import to initialize Firebase
+import { auth, db } from "@/config/firebase"; // Use the initialized Firebase instances
 
 async function testApproverRespect() {
   try {

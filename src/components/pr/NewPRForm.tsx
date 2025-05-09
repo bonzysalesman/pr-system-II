@@ -83,31 +83,27 @@ import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { PRStatus } from '../../types/pr';
 import { RootState } from '../../store/types';
 import { setUserPRs } from '../../store/slices/prSlice';
-import { prService } from '../../services/pr';
 import { referenceDataService } from '../../services/referenceData';
 import { approverService } from '../../services/approver';
-import { ReferenceDataItem } from '../../types/referenceData';
+import { Attachment } from '../../types/pr'; // Import Attachment
+import { ReferenceDataItem } from '../../types/referenceData'; // Re-add import
 import { BasicInformationStep } from './steps/BasicInformationStep';
 import { LineItemsStep } from './steps/LineItemsStep';
 import { ReviewStep } from './steps/ReviewStep';
+import { createPR, getUserPRs } from '@/services/pr'; // Updated import
+import { listAllPRs, verifyPRExists, checkRequestorPRs } from '@/utils/prDebugHelper'; // Import debug utilities
+import { checkNotificationsForPR, verifyNotificationSystem } from '@/utils/prNotificationDebugger'; // Import debug utilities
 
 // Form steps definition
 const steps = ['Basic Information', 'Line Items', 'Review'];
 
 // Type definitions for form data structures
-interface ReferenceDataItem {
-  id: string;
-  name: string;
-  code?: string;
-  active: boolean;
-}
-
 interface LineItem {
   description: string;
   quantity: number;
   uom: string;
   notes: string;
-  attachments: UploadedFile[];
+  attachments: Attachment[]; // Use Attachment type
 }
 
 interface Quote {
@@ -121,7 +117,7 @@ interface Quote {
   contactPhone?: string;
   contactEmail?: string;
   notes?: string;
-  attachments?: UploadedFile[];
+  attachments?: Attachment[]; // Use Attachment type
 }
 
 // Main form state interface
@@ -332,7 +328,9 @@ export const NewPRForm = () => {
         requester: {
           id: user.id,
           name: `${user.firstName} ${user.lastName}`,
-          email: user.email
+          email: user.email,
+          role: user.role,
+          department: formState.department || '' // Use formState department
         }
       }));
     }
@@ -565,6 +563,13 @@ export const NewPRForm = () => {
         });
       }
 
+      // Check required date
+      if (!formState.requiredDate) {
+        console.log('No required date selected');
+        errors.push('Please select a required date');
+        enqueueSnackbar('Please select a required date', { variant: 'error' });
+      }
+
       // Update validation errors state
       setValidationErrors(errors);
       
@@ -691,13 +696,6 @@ export const NewPRForm = () => {
         return false;
       }
 
-      // Check that at least one approver is selected
-      if (!formState.approvers || formState.approvers.length === 0) {
-        console.log('No approvers selected');
-        enqueueSnackbar('Please select at least one approver', { variant: 'error' });
-        return false;
-      }
-
       console.log('All validations passed');
       return true;
     } catch (error) {
@@ -754,7 +752,20 @@ export const NewPRForm = () => {
   };
 
   const handleSubmit = async () => {
-    console.log('Submitting form...', formState);
+    console.log('Form submit triggered');
+    if (!user) {
+      console.error('Cannot submit PR: User is not authenticated.');
+      setError('You must be logged in to submit a Purchase Request.');
+      enqueueSnackbar('Authentication error. Please log in again.', { variant: 'error' });
+      return; // Prevent submission if user is null
+    }
+
+    // Validate form
+    if (!validateForm()) {
+      console.log('Form validation failed');
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
@@ -798,6 +809,7 @@ export const NewPRForm = () => {
       }
 
       // Prepare PR data with proper type conversions
+      // Define the PR data with a type assertion to include optional fields
       const prData = {
         requestorId: user.id,
         requestorEmail: user.email,
@@ -806,7 +818,7 @@ export const NewPRForm = () => {
           name: formState.requestor,
           email: user.email,
           role: user.role,
-          department: user.department || ''
+          department: formState.department || '' // Use formState department
         },
         organization: formState.organization?.name || '',
         department: formState.department,
@@ -816,7 +828,8 @@ export const NewPRForm = () => {
         expenseType: formState.expenseType,
         estimatedAmount: amount,
         currency: formState.currency,
-        requiredDate: formState.requiredDate,
+        // Convert requiredDate from possibly null to string
+        requiredDate: formState.requiredDate || '',
         status: PRStatus.SUBMITTED,
         isUrgent: formState.isUrgent,
         lineItems: formState.lineItems.map(item => ({
@@ -837,8 +850,11 @@ export const NewPRForm = () => {
           contactEmail: quote.contactEmail || '',
           notes: quote.notes || '',
           attachments: quote.attachments
-        }))
-      };
+        })),
+        // Add optional fields with initial empty values
+        vehicle: '',
+        preferredVendor: ''
+      } as any; // Type assertion to any - this is only for debug purposes
 
       // Add optional fields only if they exist and are not undefined/null/empty
       if (formState.vehicle && formState.vehicle.trim() !== '') {
@@ -855,15 +871,61 @@ export const NewPRForm = () => {
         }
       }
 
-      if (formState.approvers?.length > 0) {
-        prData.approvers = formState.approvers;
-      }
-
       console.log('Submitting PR data:', prData);
 
       // Create the PR
-      const prId = await prService.createPR(prData);
-      console.log('PR created successfully');
+      const { prId, prNumber } = await createPR(prData); // Removed 'as any' cast
+      console.log('PR created successfully with ID:', prId, 'and Number:', prNumber);
+      
+      // === PR Debug: Verify PR was created successfully ===
+      try {
+        // 1. Verify this specific PR exists
+        const exists = await verifyPRExists(prId);
+        console.log(`DEBUG - PR ${prId} exists in Firestore:`, exists);
+        
+        // 2. Check all PRs by this requestor
+        const requestorPRs = await checkRequestorPRs(user.id);
+        console.log(`DEBUG - Found ${requestorPRs.count} PRs for current user:`, requestorPRs.data);
+        
+        // 3. Get total PR count for reference
+        const allPRs = await listAllPRs();
+        console.log(`DEBUG - Total PRs in system: ${allPRs.count}`);
+        
+        // 4. Output diagnostic info about this PR
+        console.group('PR Creation Diagnostic Info');
+        console.log('New PR ID:', prId);
+        console.log('New PR Number:', prNumber);
+        console.log('RequestorId used:', user.id);
+        console.log('Organization used:', formState.organization?.name);
+        console.log('User email:', user.email);
+        console.log('User firstName:', user.firstName);
+        console.log('User lastName:', user.lastName);
+        console.groupEnd();
+        
+        // 5. Check notification system and monitor for this PR
+        console.group('Notification System Check');
+        console.log('Performing comprehensive notification system check...');
+        // Perform detailed notification system verification
+        // First check the debug email configuration
+        verifyNotificationSystem();
+        
+        // Then wait for notifications to be processed and check for the specific PR
+        console.log('\nWaiting 5 seconds for notifications to be processed...');
+        // Wait a bit longer for cloud functions to process the notification
+        setTimeout(async () => {
+          console.log(`\nChecking notifications for newly created PR ${prId}...`);
+          await checkNotificationsForPR(prId);
+          console.log('\nIf no notifications appeared for this PR, please check:');
+          console.log('1. Firebase console for cloud function errors');
+          console.log('2. Browser console for JavaScript errors');
+          console.log('3. Network tab for failed API requests');
+          console.log('4. Email delivery service status');
+        }, 5000);
+        console.groupEnd();
+      } catch (debugError) {
+        console.error('DEBUG - Error during PR creation diagnostics:', debugError);
+        // Non-blocking - we don't want to interrupt the normal flow if diagnostics fail
+      }
       
       // Show success message
       enqueueSnackbar('Purchase Request submitted successfully!', { 
@@ -874,7 +936,10 @@ export const NewPRForm = () => {
       // Refresh PR data before navigating
       if (user) {
         console.log('Refreshing PR data for user:', user.id);
-        const updatedPRs = await prService.getUserPRs(user.id, formState.organization?.id || '');
+        
+        // Additional debug logging for PR refresh
+        console.log('DEBUG - Organization for PR refresh:', formState.organization?.name);
+        const updatedPRs = await getUserPRs(user.id, formState.organization?.id || '');
         console.log('Updated PRs:', updatedPRs);
         dispatch(setUserPRs(updatedPRs));
       }

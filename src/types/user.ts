@@ -46,7 +46,9 @@ export interface User {
   /** User's last name */
   lastName: string;
   /** User's role */
-  role: UserRole;
+  role: string;
+  /** User's department */
+  department: string;
   /** Associated organization */
   organization: string;
   /** Whether user is active */
@@ -56,7 +58,11 @@ export interface User {
   /** Additional organizations */
   additionalOrganizations?: string[];
   /** User permissions */
-  permissions: UserPermissions;
+  permissions?: string[];
+  /** Full permissions object */
+  userPermissions?: UserPermissions;
+  /** User's name */
+  name?: string;
 }
 
 /**

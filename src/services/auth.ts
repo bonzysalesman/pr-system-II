@@ -40,7 +40,7 @@ import {
   onAuthStateChanged,
   getIdToken,
   sendPasswordResetEmail,
-  getAuth,
+  // getAuth,
   User as FirebaseUser,
   AuthError
 } from 'firebase/auth';
@@ -57,8 +57,8 @@ import {
 } from 'firebase/firestore';
 
 import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '../config/firebase';
-import { User } from '../types/user';
+import { db, functions, auth } from "@/config/firebase";
+import { User, UserPermissions } from '../types/user';
 import { store } from '../store';
 import { setUser, clearUser, setLoading, setError } from '../store/slices/authSlice';
 import { normalizeOrganizationId } from '@/utils/organization';
@@ -87,13 +87,16 @@ const startTokenRefresh = async (user: FirebaseUser) => {
 };
 
 export const signIn = async (email: string, password: string): Promise<void> => {
-  console.log('auth.ts: Attempting sign in');
+  console.log('auth.ts: Attempting sign in with email:', email);
+  console.log('auth.ts: Firebase auth instance:', auth?.config?.apiKey ? 'Valid' : 'Invalid');
+  console.log('auth.ts: Firebase auth domain:', auth?.config?.authDomain);
   try {
     store.dispatch(setLoading(true));
     store.dispatch(setError(null));
 
     // Sign in with Firebase
-    const userCredential = await signInWithEmailAndPassword(getAuth(), email, password);
+    console.log('auth.ts: Calling signInWithEmailAndPassword');
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
     console.log('auth.ts: Firebase sign in successful');
 
     // Get user details from Firestore
@@ -125,6 +128,9 @@ export const signIn = async (email: string, password: string): Promise<void> => 
         case AuthErrorCodes.TOO_MANY_ATTEMPTS_TRY_LATER:
           errorMessage = 'Too many attempts. Please try again later';
           break;
+        case 'auth/invalid-credential':
+          errorMessage = 'Invalid email or password. Please check your credentials and try again.';
+          break;
         default:
           errorMessage = authError.message;
       }
@@ -139,7 +145,7 @@ export const signIn = async (email: string, password: string): Promise<void> => 
 
 export const signOut = async (): Promise<void> => {
   try {
-    await firebaseSignOut(getAuth());
+    await firebaseSignOut(auth);
     if (refreshTokenInterval) {
       clearInterval(refreshTokenInterval);
       refreshTokenInterval = null;
@@ -155,20 +161,53 @@ export const signOut = async (): Promise<void> => {
 export const getUserDetails = async (uid: string): Promise<User> => {
   try {
     const userDoc = await getDoc(doc(db, 'users', uid));
-    if (!userDoc.exists()) {
-      throw new Error('User not found');
-    }
-    const userData = userDoc.data();
     
-    // If the user's organization is 'Codeium', update it to a default organization
-    if (userData.organization === 'Codeium') {
-      console.log('Found default organization, updating to 1PWR LESOTHO');
-      // Update the user's organization in Firestore
-      await updateDoc(doc(db, 'users', uid), {
+    // Initialize userData variable that will be used in both cases
+    let userData: any;
+    
+    // If the user document doesn't exist in Firestore, create a default one
+    if (!userDoc.exists()) {
+      console.log('auth.ts: User document not found in Firestore. Creating default user profile...');
+      
+      // Get the user's email from Firebase Auth
+      const firebaseUser = auth.currentUser;
+      const email = firebaseUser?.email || '';
+      
+      // Create a default user document
+      const defaultUserData = {
+        email,
+        firstName: 'User',
+        lastName: email.split('@')[0] || 'New',
+        role: 'User',
+        department: 'General',
         organization: '1PWR LESOTHO',
+        isActive: true,
+        permissionLevel: 5, // Default to lowest permission level
+        additionalOrganizations: [],
+        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      });
-      userData.organization = '1PWR LESOTHO';
+      };
+      
+      // Save the default user data to Firestore
+      await setDoc(doc(db, 'users', uid), defaultUserData);
+      console.log('auth.ts: Created default user profile for:', email);
+      
+      // Assign the newly created user data
+      userData = defaultUserData;
+    } else {
+      // User document exists, proceed normally
+      userData = userDoc.data();
+      
+      // If the user's organization is 'Codeium', update it to a default organization
+      if (userData.organization === 'Codeium') {
+        console.log('Found default organization, updating to 1PWR LESOTHO');
+        // Update the user's organization in Firestore
+        await updateDoc(doc(db, 'users', uid), {
+          organization: '1PWR LESOTHO',
+          updatedAt: new Date().toISOString()
+        });
+        userData.organization = '1PWR LESOTHO';
+      }
     }
 
     // Map permissions based on role and permission level
@@ -187,11 +226,15 @@ export const getUserDetails = async (uid: string): Promise<User> => {
       firstName: userData.firstName,
       lastName: userData.lastName,
       role: userData.role,
+      department: userData.department,
       organization: userData.organization,
       isActive: userData.isActive,
       permissionLevel: userData.permissionLevel,
       additionalOrganizations: userData.additionalOrganizations || [],
-      permissions // Add permissions to user object
+      permissions: Object.entries(permissions)
+        .filter(([_, value]) => value === true)
+        .map(([key]) => key),
+      userPermissions: permissions
     };
   } catch (error) {
     console.error('Error fetching user details:', error);
@@ -216,7 +259,7 @@ function getApprovalLimit(permissionLevel: number): number {
 }
 
 export const getCurrentUser = async (): Promise<User | null> => {
-  const user = getAuth().currentUser;
+  const user = auth.currentUser;
   if (!user) {
     return null;
   }
@@ -224,7 +267,7 @@ export const getCurrentUser = async (): Promise<User | null> => {
 };
 
 export const initializeAuthListener = (): void => {
-  onAuthStateChanged(getAuth(), async (user) => {
+  onAuthStateChanged(auth, async (user) => {
     try {
       if (user) {
         const userDetails = await getUserDetails(user.uid);
@@ -251,7 +294,7 @@ export const resetPassword = async (email: string): Promise<void> => {
     store.dispatch(setLoading(true));
     store.dispatch(setError(null));
 
-    await sendPasswordResetEmail(getAuth(), email);
+    await sendPasswordResetEmail(auth, email);
     console.log('auth.ts: Password reset email sent');
   } catch (error) {
     console.error('auth.ts: Password reset failed:', error);

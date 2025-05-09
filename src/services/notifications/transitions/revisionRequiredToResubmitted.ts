@@ -1,6 +1,6 @@
 import { User } from '../../../types/user';
 import { EmailContent, NotificationContext, Recipients, StatusTransitionHandler } from '../types';
-import { db } from '../../../config/firebase';
+import { db } from "@/config/firebase";
 import { doc, getDoc } from 'firebase/firestore';
 import { getBaseUrl } from '../../../utils/environment';
 

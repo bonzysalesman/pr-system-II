@@ -35,7 +35,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import { StorageService } from '../../../services/storage';
 import { Quote, ReferenceDataItem } from '../../../types/pr';
-import { auth } from '../../../config/firebase';
+import { auth } from "@/config/firebase";
 
 interface QuotesStepProps {
   formState: {

@@ -33,7 +33,7 @@ import {
 import { Edit as EditIcon, Delete as DeleteIcon, Visibility, VisibilityOff, Key as KeyIcon } from '@mui/icons-material';
 import { doc, collection, query, where, getDocs, updateDoc, addDoc, deleteDoc, orderBy, setDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '../../config/firebase';
+import { db, functions } from "@/config/firebase";
 import { User } from '../../types/user';
 import { updateUserEmail, createUser, updateUserPassword } from '../../services/auth';
 import { useSnackbar } from '../../contexts/SnackbarContext';

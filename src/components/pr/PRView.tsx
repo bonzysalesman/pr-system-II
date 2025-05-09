@@ -3,6 +3,10 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { useSnackbar } from "notistack";
 import { useDropzone } from 'react-dropzone';
+import { PRApprovalActionButton } from './PRApprovalActionButton';
+// Temporarily disabled to fix loading issues
+// import { ApproverReviewPanel } from './ApproverReviewPanel';
+import { ApproverActions } from './ApproverActions';
 import { referenceDataService } from '@/services/referenceData';
 import {
   Box,
@@ -70,7 +74,6 @@ import { QuotesStep } from './steps/QuotesStep';
 import { notificationService } from '@/services/notification';
 import { approverService } from '@/services/approver';
 import * as auth from '@/services/auth';
-import { ApproverActions } from './ApproverActions';
 
 interface EditablePRFields {
   department?: string;
@@ -472,7 +475,11 @@ export function PRView() {
 
   // Fetch PR data
   const fetchPR = async () => {
-    if (!id) return;
+    if (!id) {
+      setError('Invalid PR ID');
+      return;
+    }
+    
     try {
       setLoading(true);
       const prData = await prService.getPR(id);
@@ -486,7 +493,8 @@ export function PRView() {
       });
 
       if (!prData) {
-        setError('PR not found');
+        setError(`Purchase Request with ID ${id} not found. It may have been deleted or you may not have permission to view it.`);
+        setLoading(false);
         return;
       }
 
@@ -632,8 +640,13 @@ export function PRView() {
   }, [pr?.lineItems]);
 
   useEffect(() => {
-    if (!pr?.organization) {
-      console.log('No organization available to load approvers');
+    // If PR has no organization but user has one, use that as fallback
+    const organizationId = pr?.organization || currentUser?.organization;
+    
+    if (!organizationId) {
+      console.log('No organization available to load approvers - using current user organization as fallback');
+      setApprovers([]);
+      setLoadingApprovers(false);
       return;
     }
 
@@ -641,8 +654,8 @@ export function PRView() {
     const loadApprovers = async () => {
       try {
         setLoadingApprovers(true);
-        console.log('Loading approvers for organization:', pr.organization);
-        const approverList = await approverService.getApprovers(pr.organization);
+        console.log('Loading approvers for organization:', organizationId);
+        const approverList = await approverService.getApprovers(organizationId);
         
         if (!mounted) return;
 
@@ -1820,6 +1833,11 @@ export function PRView() {
               Resubmit PR
             </Button>
           )}
+          
+          {/* Send for Approval Button - Only visible for SUBMITTED or RESUBMITTED statuses */}
+          {pr && (pr.status === PRStatus.SUBMITTED || pr.status === PRStatus.RESUBMITTED) && (
+            <PRApprovalActionButton pr={pr} onStatusUpdate={refreshPR} />
+          )}
         </Box>
       </Box>
 
@@ -1835,6 +1853,16 @@ export function PRView() {
           />
         </Box>
       )}
+
+      {/* Enhanced Approver Review Panel - Temporarily disabled to fix loading issues */}
+      {/* {pr?.status === PRStatus.PENDING_APPROVAL && (
+        <ApproverReviewPanel
+          pr={pr}
+          currentUser={currentUser}
+          assignedApprover={assignedApprover || currentApprover}
+          onStatusChange={refreshPR}
+        />
+      )} */}
 
       {/* Approver Actions */}
       {pr?.status === PRStatus.PENDING_APPROVAL && (

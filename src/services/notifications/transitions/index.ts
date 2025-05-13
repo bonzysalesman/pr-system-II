@@ -6,6 +6,11 @@ import { RevisionRequiredToResubmittedHandler } from './revisionRequiredToResubm
 import { SubmittedToPendingApprovalHandler } from './submittedToPendingApproval';
 import { PendingApprovalToApprovedHandler } from './pendingApprovalToApproved';
 import { PendingApprovalToRejectedHandler } from './pendingApprovalToRejected';
+import { SubmittedToCanceledHandler } from './submittedToCanceled';
+import { PendingApprovalToCanceledHandler } from './pendingApprovalToCanceled';
+import { ApprovedToOrderedHandler } from './approvedToOrdered';
+import { OrderedToPartiallyReceivedHandler } from './orderedToPartiallyReceived';
+import { PartiallyReceivedToCompletedHandler } from './partiallyReceivedToCompleted';
 
 // Map of status transitions to their handlers
 const transitionHandlers = new Map<string, StatusTransitionHandler>();
@@ -24,6 +29,13 @@ transitionHandlers.set(createTransitionKey(PRStatus.SUBMITTED, PRStatus.PENDING_
 transitionHandlers.set(createTransitionKey(PRStatus.IN_QUEUE, PRStatus.PENDING_APPROVAL), new SubmittedToPendingApprovalHandler());
 transitionHandlers.set(createTransitionKey(PRStatus.PENDING_APPROVAL, PRStatus.APPROVED), new PendingApprovalToApprovedHandler());
 transitionHandlers.set(createTransitionKey(PRStatus.PENDING_APPROVAL, PRStatus.REJECTED), new PendingApprovalToRejectedHandler());
+// Add handlers for cancellation status transitions
+transitionHandlers.set(createTransitionKey(PRStatus.SUBMITTED, PRStatus.CANCELED), new SubmittedToCanceledHandler());
+transitionHandlers.set(createTransitionKey(PRStatus.PENDING_APPROVAL, PRStatus.CANCELED), new PendingApprovalToCanceledHandler());
+// Add handlers for order processing and delivery status transitions
+transitionHandlers.set(createTransitionKey(PRStatus.APPROVED, PRStatus.ORDERED), new ApprovedToOrderedHandler());
+transitionHandlers.set(createTransitionKey(PRStatus.ORDERED, PRStatus.PARTIALLY_RECEIVED), new OrderedToPartiallyReceivedHandler());
+transitionHandlers.set(createTransitionKey(PRStatus.PARTIALLY_RECEIVED, PRStatus.COMPLETED), new PartiallyReceivedToCompletedHandler());
 
 export function getTransitionHandler(oldStatus: PRStatus | null, newStatus: PRStatus): StatusTransitionHandler | undefined {
   return transitionHandlers.get(createTransitionKey(oldStatus, newStatus));

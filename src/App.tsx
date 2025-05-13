@@ -21,6 +21,7 @@ import { Box, Typography, CircularProgress } from '@mui/material';
 import { SnackbarProvider } from './contexts/SnackbarContext';
 import "./App.css";
 import { TestEmail } from './components/TestEmail';
+import { NotificationTester } from './components/testing/NotificationTester';
 
 function App() {
   console.log('App: Component rendering');
@@ -94,6 +95,7 @@ function App() {
                   <Route path="/pr/:id" element={<PRView />} />
                   <Route path="/pr/:id/edit" element={<PRView />} />
                   <Route path="/test-email" element={<TestEmail />} />
+                  <Route path="/test-notifications" element={<NotificationTester />} />
                   <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 </Route>
               </Route>
